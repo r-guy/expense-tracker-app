@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.example.test.data.UserSession
 import com.example.test.data.dao.BudgetDao
 import com.example.test.data.dao.CategoryDao
 import com.example.test.data.dao.SettingsDao
@@ -13,7 +14,9 @@ import com.example.test.model.Budget
 import com.example.test.model.CategoryType
 import com.example.test.util.DateConverter
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -23,7 +26,8 @@ import javax.inject.Inject
 class AddEditBudgetViewModel @Inject constructor(
     private val budgetDao: BudgetDao,
     private val categoryDao: CategoryDao,
-    private val settingsDao: SettingsDao
+    private val settingsDao: SettingsDao,
+    private val userSession: UserSession
 ) : ViewModel() {
 
     var categoryId: Int? by mutableStateOf(null)
@@ -34,11 +38,17 @@ class AddEditBudgetViewModel @Inject constructor(
     var errorMessage: String? by mutableStateOf(null)
     private var currentBudgetId: Int? = null
 
-    val categories = categoryDao.getCategoriesByType(CategoryType.EXPENSE.toString()).asLiveData()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val categories = userSession.userId
+        .flatMapLatest { userId ->
+            categoryDao.getCategoriesByType(userId, CategoryType.EXPENSE.toString())
+        }
+        .asLiveData()
 
     init {
         viewModelScope.launch {
-            val settings = settingsDao.getSettings().first()
+            val userId = userSession.requireUserId()
+            val settings = settingsDao.getSettings(userId).first()
             val startDay = settings?.firstDayOfMonth ?: 1
             val calendarType = settings?.calendarType ?: "GREGORIAN"
             startDate = getCurrentStartDate(startDay, calendarType)
@@ -63,17 +73,23 @@ class AddEditBudgetViewModel @Inject constructor(
     fun saveBudget(onDone: () -> Unit) {
         viewModelScope.launch {
             val repeatCount = repeat.toIntOrNull() ?: 1
-            
+            val userId = userSession.requireUserId()
+
             // Validate input
             if (amountLimit.toDoubleOrNull() == null) {
                 errorMessage = "Please enter a valid amount"
                 return@launch
             }
-            
+
             // Check for overlapping budgets
             if (currentBudgetId == null) {
                 val currentCategoryId = categoryId
-                val overlappingBudgets = budgetDao.getOverlappingBudgets(currentCategoryId, startDate, endDate)
+                val overlappingBudgets = budgetDao.getOverlappingBudgets(
+                    userId,
+                    currentCategoryId,
+                    startDate,
+                    endDate
+                )
                 if (overlappingBudgets.isNotEmpty()) {
                     val categoryName = if (currentCategoryId == null) "Overall" 
                         else categoryDao.getCategoryNameById(currentCategoryId) ?: "Unknown"
@@ -81,7 +97,7 @@ class AddEditBudgetViewModel @Inject constructor(
                     return@launch
                 }
             }
-            
+
             // Create the main budget
             val mainBudget = Budget(
                 id = currentBudgetId ?: 0,
@@ -89,22 +105,28 @@ class AddEditBudgetViewModel @Inject constructor(
                 amountLimit = amountLimit.toDoubleOrNull() ?: 0.0,
                 startDate = startDate,
                 endDate = endDate,
-                repeat = repeatCount
+                repeat = repeatCount,
+                userId = userId
             )
             budgetDao.insert(mainBudget)
-            
+
             // If repeat is greater than 1, create additional budgets for future months
             if (repeatCount > 1 && currentBudgetId == null) { // Only create repeats for new budgets
-                val settings = settingsDao.getSettings().first()
+                val settings = settingsDao.getSettings(userId).first()
                 val calendarType = settings?.calendarType ?: "GREGORIAN"
-                createRepeatedBudgets(mainBudget, repeatCount, calendarType)
+                createRepeatedBudgets(mainBudget, repeatCount, calendarType, userId)
             }
-            
+
             onDone()
         }
     }
     
-    private suspend fun createRepeatedBudgets(mainBudget: Budget, repeatCount: Int, calendarType: String) {
+    private suspend fun createRepeatedBudgets(
+        mainBudget: Budget,
+        repeatCount: Int,
+        calendarType: String,
+        userId: Int
+    ) {
         // Parse the dates
         val startDateParts = mainBudget.startDate.split("-")
         val endDateParts = mainBudget.endDate.split("-")
@@ -134,12 +156,16 @@ class AddEditBudgetViewModel @Inject constructor(
                 amountLimit = mainBudget.amountLimit,
                 startDate = newStartDate,
                 endDate = newEndDate,
-                repeat = 1 // Don't repeat the repeats
+                repeat = 1, // Don't repeat the repeats
+                userId = userId
             )
             
             // Check for overlaps before inserting
             val overlappingBudgets = budgetDao.getOverlappingBudgets(
-                newBudget.categoryId, newBudget.startDate, newBudget.endDate
+                userId,
+                newBudget.categoryId,
+                newBudget.startDate,
+                newBudget.endDate
             )
             if (overlappingBudgets.isEmpty()) {
                 budgetDao.insert(newBudget)

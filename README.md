@@ -27,10 +27,11 @@ A comprehensive Android application for managing personal finances. Track income
 - **UI Framework**: Jetpack Compose with Material Design 3
 - **Architecture**: MVVM with Clean Architecture principles
 - **Dependency Injection**: Hilt (Dagger)
-- **Database**: Room (SQLite)
+- **Database**: Room (SQLite), one schema scoped per signed-in user
 - **Async Operations**: Kotlin Coroutines & Flow
-- **Data Storage**: DataStore (Preferences)
-- **Networking**: Retrofit, OkHttp, Ktor Client
+- **Data Storage**: DataStore (Preferences) for session/user id
+- **Authentication**: Neon Auth (Managed Better Auth) over HTTPS, cookie sessions
+- **Networking**: OkHttp (Neon Auth client + currency-rate client)
 - **Build System**: Gradle with Kotlin DSL
 
 ## Project Structure
@@ -38,10 +39,11 @@ A comprehensive Android application for managing personal finances. Track income
 ```
 app/
 ├── data/
-│   ├── api/              # API services (currency exchange)
-│   ├── dao/              # Room DAOs
-│   ├── datastore/        # DataStore implementations
-│   └── repository/       # Repository implementations
+│   ├── api/              # Currency rates + Neon Auth REST client
+│   ├── auth/             # Persistent session cookie jar
+│   ├── dao/              # Room DAOs (all queries scoped by userId)
+│   ├── datastore/        # DataStore implementations (session + user id)
+│   └── repository/       # Repository implementations (auth, data seeding)
 ├── di/                   # Dependency injection modules
 ├── model/                # Data models and entities
 ├── navigation/           # Navigation graph and screen definitions
@@ -62,6 +64,9 @@ app/
     └── transactions/
 ```
 
+A companion backend lives in `D:/ExpenseTrackerBackend` (FastAPI, Docker) and
+serves cached currency rates. Authentication is handled by Neon, not by that service.
+
 ## Getting Started
 
 ### Prerequisites
@@ -74,15 +79,81 @@ app/
    ```bash
    git clone https://github.com/Erfan-Farahmandnejad/Personal-Finance-Manager-Using-Kotlin-and-Jetpack-Compose.git
    ```
-2. Open the project in Android Studio
-3. Sync Gradle dependencies
-4. Build and run the application on your device or emulator
+2. Create the environment file (see [Configuration](#configuration))
+   ```bash
+   cp .env.example .env
+   ```
+   Fill in your own values. `.env` is git-ignored and is baked into `BuildConfig`
+   at build time, so rebuild after changing it.
+3. Start the currency backend (optional but recommended)
+   ```bash
+   cd D:/ExpenseTrackerBackend
+   docker compose up --build -d
+   ```
+4. Open the project in Android Studio
+5. Sync Gradle dependencies
+6. Build and run the application on your device or emulator
+
+## Configuration
+
+The app reads a root-level `.env` file at build time:
+
+| Variable | Purpose |
+|---|---|
+| `EXCHANGE_RATE_API_KEY` | ExchangeRate-API fallback key (only used if the backend is unreachable) |
+| `EXCHANGE_RATE_API_BASE` | `https://v6.exchangerate-api.com/v6` |
+| `CURRENCY_BACKEND_BASE_URL` | One or more backend URLs, comma-separated, tried in order |
+| `NEON_AUTH_BASE_URL` | Neon Auth endpoint used for sign-up / sign-in / sign-out |
+
+See `.env.example` for a template. Never commit `.env`.
+
+### Local backend URL
+
+`CURRENCY_BACKEND_BASE_URL` accepts a list; the app uses the first reachable one:
+
+| Scenario | Value | Setup |
+|---|---|---|
+| Physical device over USB | `http://127.0.0.1:8000` | `adb reverse tcp:8000 tcp:8000` |
+| Physical device on Wi-Fi | `http://<PC-LAN-IP>:8000` | allow port 8000 in the firewall |
+| Android emulator | `http://10.0.2.2:8000` | nothing extra |
+
+Example:
+
+```
+CURRENCY_BACKEND_BASE_URL=http://127.0.0.1:8000,http://192.168.0.44:8000
+```
+
+### Authentication
+
+Sign-in is handled by **Neon Auth (Managed Better Auth)**. Users, sessions and
+accounts are stored in the `neon_auth` schema of a Neon Postgres branch; the app
+never holds a database credential.
+
+Provision it once from the backend folder:
+
+```bash
+neon init -y --org-id <org> --project-id <project> --branch production --services "postgres,auth"
+neon login     # browser sign-in
+neon deploy    # applies neon.ts and writes NEON_AUTH_* / DATABASE_URL to .env
+```
+
+Copy the resulting `NEON_AUTH_BASE_URL` into the app's `.env` and rebuild.
+Sessions are cookie-based: the app stores them in a persistent cookie jar, so
+users stay signed in across restarts. Signing out revokes the server session.
+
+Never put `DATABASE_URL` in the app — it belongs on the server only.
 
 ### First-Time Setup
 
 #### 1. Authentication
 - Launch the app and create your account via the Sign Up screen
-- Sign in with your credentials
+- Credentials are verified by Neon Auth; the session is remembered on the device
+- Sign out from **Settings → Account → Sign Out**
+
+#### 2. Per-account data isolation
+Every account, category, transaction, budget and notification row carries a
+`userId`. All queries are filtered by the signed-in user, so two people using
+the same device each see only their own data.
 
 #### 2. Dashboard Overview
 - After signing in, you will land on the Dashboard
@@ -222,16 +293,31 @@ The application includes the following screens:
 ## Key Features Implementation
 
 ### Database Schema
-- **Users**: User authentication and profile data
-- **Accounts**: Financial account information
-- **Categories**: Income and expense categories
-- **Transactions**: Financial transactions with type, amount, date, and notes
-- **Budgets**: Budget limits with start/end dates and repeat functionality
-- **Notifications**: System notifications and alerts
-- **Settings**: User preferences and app configuration
+- **Users**: local mapping of an authenticated email to the id that owns its data
+- **Accounts**: Financial account information (scoped by `userId`)
+- **Categories**: Income and expense categories (scoped by `userId`)
+- **Transactions**: Financial transactions with type, amount, date, and notes (scoped by `userId`)
+- **Budgets**: Budget limits with start/end dates and repeat functionality (scoped by `userId`)
+- **Notifications**: System notifications and alerts (scoped by `userId`)
+- **Settings**: User preferences and app configuration (one row per user)
+
+Schema version 6, with migrations from versions 1–5. Existing pre-multi-user
+rows are claimed by the first account that signs in, so upgrading keeps data.
 
 ### Services
 - **BudgetNotificationService**: Background service for monitoring budgets and sending alerts
+
+### Currency Rates
+Amounts are stored in USD and displayed in the user's primary currency, with a
+secondary currency shown alongside (USD + INR by default). Rates come from the
+FastAPI backend first and fall back to ExchangeRate-API directly if it is
+unreachable; results are cached for one hour and prefetched at app start.
+
+## Security Notes
+
+- Passwords are never stored on the device; only the auth session cookie is.
+- `DATABASE_URL` and other Neon credentials stay in the backend `.env`, never in the app.
+- Debug builds allow cleartext HTTP for the local backend; release builds stay HTTPS-only.
 
 ## Contributors
 

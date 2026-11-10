@@ -1,5 +1,6 @@
 package com.example.test.model
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -47,5 +48,8 @@ data class Transaction(
     /**
      * Optional descriptive note for the transaction
      */
-    val note: String
+    val note: String,
+
+    /** Owner of this row; 0 means "not claimed yet" (legacy data). */
+    @ColumnInfo(defaultValue = "0") val userId: Int = 0
 )

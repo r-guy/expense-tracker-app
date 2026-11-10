@@ -15,48 +15,48 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface TransactionDao {
     /**
-     * Retrieves all transactions ordered by date (newest first)
+     * Retrieves all transactions for one user ordered by date (newest first)
      * Returns a Flow that emits updates whenever the underlying data changes
      */
-    @Query("SELECT * FROM transactions ORDER BY date DESC")
-    fun getAllTransactions(): Flow<List<Transaction>>
+    @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY date DESC")
+    fun getAllTransactions(userId: Int): Flow<List<Transaction>>
 
     /**
      * Retrieves a specific transaction by its ID
-     * @param id The unique identifier of the transaction
-     * @return The transaction if found, null otherwise
      */
     @Query("SELECT * FROM transactions WHERE id = :id")
     suspend fun getTransactionById(id: Int): Transaction?
 
     /**
      * Calculates the total amount spent in a specific category within a date range
-     * @param categoryId The category to filter by (can be null)
-     * @param startDate Beginning of the date range in string format
-     * @param endDate End of the date range in string format
-     * @return Sum of expense transactions amount or null if no matching transactions
      */
-    @Query("SELECT SUM(amount) FROM transactions WHERE type = 'expense' AND categoryId = :categoryId AND date BETWEEN :startDate AND :endDate")
-    suspend fun getTotalExpensesForCategoryInDateRange(categoryId: Int?, startDate: String, endDate: String): Double?
+    @Query(
+        "SELECT SUM(amount) FROM transactions " +
+            "WHERE userId = :userId AND type = 'expense' AND categoryId = :categoryId " +
+            "AND date BETWEEN :startDate AND :endDate"
+    )
+    suspend fun getTotalExpensesForCategoryInDateRange(
+        userId: Int,
+        categoryId: Int?,
+        startDate: String,
+        endDate: String
+    ): Double?
 
     /**
      * Inserts a new transaction or replaces an existing one
-     * @param transaction The transaction entity to save
      */
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transaction: Transaction)
 
     /**
      * Deletes a transaction from the database
-     * @param transaction The transaction entity to delete
      */
     @Delete
     suspend fun delete(transaction: Transaction)
 
     /**
      * Deletes a transaction by its ID
-     * @param id The unique identifier of the transaction to delete
      */
-    @Query("DELETE FROM transactions WHERE id = :id")
-    suspend fun deleteById(id: Int)
+    @Query("DELETE FROM transactions WHERE id = :id AND userId = :userId")
+    suspend fun deleteById(id: Int, userId: Int)
 }

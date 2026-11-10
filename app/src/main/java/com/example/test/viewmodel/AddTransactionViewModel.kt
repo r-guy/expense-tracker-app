@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.test.data.dao.AccountDao
 import com.example.test.data.dao.CategoryDao
 import com.example.test.data.dao.TransactionDao
+import com.example.test.data.UserSession
 import com.example.test.model.Account
 import com.example.test.model.CategoryType
 import com.example.test.model.Transaction
@@ -27,7 +28,8 @@ class AddTransactionViewModel @Inject constructor(
     private val transactionDao: TransactionDao,
     private val categoryDao: CategoryDao,
     private val accountDao: AccountDao,
-    private val budgetNotificationService: BudgetNotificationService
+    private val budgetNotificationService: BudgetNotificationService,
+    private val userSession: UserSession
 ) : ViewModel() {
 
     private val _type = mutableStateOf("expense")
@@ -77,17 +79,21 @@ class AddTransactionViewModel @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    val categories = _typeFlow.flatMapLatest { currentType ->
-        categoryDao.getAllCategories().map { allCategories ->
-            when (currentType) {
-                "income" -> allCategories.filter { it.type == CategoryType.INCOME }
-                "expense" -> allCategories.filter { it.type == CategoryType.EXPENSE }
-                else -> emptyList()
+    val categories = combine(_typeFlow, userSession.userId) { type, userId -> type to userId }
+        .flatMapLatest { (currentType, userId) ->
+            categoryDao.getAllCategories(userId).map { allCategories ->
+                when (currentType) {
+                    "income" -> allCategories.filter { it.type == CategoryType.INCOME }
+                    "expense" -> allCategories.filter { it.type == CategoryType.EXPENSE }
+                    else -> emptyList()
+                }
             }
-        }
-    }.asLiveData()
+        }.asLiveData()
 
-    val accounts = accountDao.getAllAccounts().asLiveData()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val accounts = userSession.userId
+        .flatMapLatest { userId -> accountDao.getAllAccounts(userId) }
+        .asLiveData()
     val budgetAlerts = _budgetAlerts
 
     fun loadTransaction(transactionId: Int) {
@@ -118,6 +124,8 @@ class AddTransactionViewModel @Inject constructor(
             if (amountValue == null) {
                 return@launch
             }
+
+            val userId = userSession.requireUserId()
 
             // Get current account balances
             val fromAccount = fromAccountId?.let { accountDao.getAccountById(it) }
@@ -170,7 +178,8 @@ class AddTransactionViewModel @Inject constructor(
                     "transfer" -> toAccountId
                     else -> null
                 },
-                note = note
+                note = note,
+                userId = userId
             )
 
             transactionDao.insert(transaction)

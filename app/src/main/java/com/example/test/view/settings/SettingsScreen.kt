@@ -40,7 +40,9 @@ fun SettingsScreen(
     // Settings view model to manage user preferences
     viewModel: SettingsViewModel = hiltViewModel(),
     // Navigation callback function
-    onNavigate: (String) -> Unit = {}
+    onNavigate: (String) -> Unit = {},
+    // Called after the user signs out (token cleared)
+    onLogout: () -> Unit = {}
 ) {
     // Get the day of month when monthly calculations should start (default: 1)
     val firstDayOfMonth by viewModel.firstDayOfMonth.observeAsState(1)
@@ -55,6 +57,32 @@ fun SettingsScreen(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Sign out?") },
+            text = {
+                Text("Your transactions stay on this device. You will need to sign in again to continue.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        viewModel.signOut(onLogout)
+                    }
+                ) {
+                    Text("Sign Out", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     AppNavigationDrawer(
         drawerState = drawerState,
@@ -137,8 +165,8 @@ fun SettingsScreen(
                             label = "Calendar Type",
                             labelFor = { 
                                 when(it) {
-                                    "GREGORIAN" -> "Gregorian Calendar (میلادی)"  // Western calendar with English/Arabic numerals
-                                    "PERSIAN" -> "Persian Calendar (شمسی)"  // Iranian/Afghan calendar with Persian months
+                                    "GREGORIAN" -> "Gregorian Calendar"
+                                    "PERSIAN" -> "Persian Calendar"
                                     else -> it
                                 }
                             },
@@ -174,7 +202,7 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                         
-                        val secondaryCurrency = if (currency == "USD") Currencies.IRR else Currencies.USD
+                        val secondaryCurrency = if (currency == "USD") Currencies.INR else Currencies.USD
                         Text(
                             text = "Your secondary currency will be ${secondaryCurrency.symbol} - ${secondaryCurrency.name}",
                             style = MaterialTheme.typography.bodySmall,
@@ -240,12 +268,14 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
+                        val secondaryCurrency = if (currency == "USD") Currencies.INR else Currencies.USD
+
                         if (currency == "USD") {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("USD to IRR (Buy)")
+                                Text("USD to ${secondaryCurrency.code} (Buy)")
                                 Text(
                                     text = "USD Buying Rate",
                                     color = MaterialTheme.colorScheme.primary
@@ -256,7 +286,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Text("IRR to USD (Sell)")
+                                Text("${secondaryCurrency.code} to USD (Sell)")
                                 Text(
                                     text = "USD Selling Rate",
                                     color = MaterialTheme.colorScheme.primary
@@ -272,6 +302,40 @@ fun SettingsScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
+                    }
+                }
+
+                // Account actions
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Account",
+                            style = MaterialTheme.typography.titleLarge
+                        )
+
+                        Text(
+                            text = "You are signed in on this device.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        OutlinedButton(
+                            onClick = { showLogoutDialog = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text("Sign Out")
+                        }
                     }
                 }
             }

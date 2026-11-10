@@ -16,7 +16,7 @@ class CurrencyFormatter @Inject constructor(
     // Primary currency is the one user prefers to see
     private var primaryCurrency = "USD"
     // Secondary currency is the alternative currency to show
-    private var secondaryCurrency = "IRR"
+    private var secondaryCurrency = "INR"
     
     companion object {
         fun formatAmount(amount: Double, currencyCode: String): String {
@@ -37,8 +37,12 @@ class CurrencyFormatter @Inject constructor(
     
     fun setPrimaryCurrency(currency: String) {
         primaryCurrency = currency
-        // Set secondary currency (if primary is USD, secondary is IRR, otherwise USD)
-        secondaryCurrency = if (currency == "USD") "IRR" else "USD"
+        // Pair USD with INR; for any other primary currency, show USD alongside it.
+        secondaryCurrency = if (currency == "USD") "INR" else "USD"
+    }
+
+    fun setSecondaryCurrency(currency: String) {
+        secondaryCurrency = currency
     }
     
     fun getPrimaryCurrency(): String = primaryCurrency

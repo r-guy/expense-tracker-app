@@ -1,6 +1,7 @@
 package com.example.test.service
 
 import android.util.Log
+import com.example.test.data.UserSession
 import com.example.test.data.dao.BudgetDao
 import com.example.test.data.dao.CategoryDao
 import com.example.test.data.dao.NotificationDao
@@ -23,7 +24,8 @@ class BudgetNotificationService @Inject constructor(
     private val transactionDao: TransactionDao,
     private val notificationDao: NotificationDao,
     private val categoryDao: CategoryDao,
-    private val settingsDao: SettingsDao
+    private val settingsDao: SettingsDao,
+    private val userSession: UserSession
 ) {
     /**
      * Data class representing a budget threshold alert
@@ -38,30 +40,33 @@ class BudgetNotificationService @Inject constructor(
     /**
      * Checks all budgets or a specific category budget against spending thresholds
      * Creates notifications when spending reaches important thresholds
-     * 
+     *
      * @param categoryId Optional category ID to check only that specific budget
      * @return List of generated budget alerts
      */
     suspend fun checkBudgetThresholds(categoryId: Int? = null): List<BudgetAlert> {
+        val userId = userSession.requireUserId()
+
         // First check if notifications are enabled in settings
-        val settings = settingsDao.getSettings().first()
+        val settings = settingsDao.getSettings(userId).first()
         val notificationsEnabled = settings?.notificationsEnabled ?: true
-        
+
         // If notifications are disabled, return empty list
         if (!notificationsEnabled) {
             Log.d("BudgetAlert", "Notifications are disabled in settings. Skipping alerts.")
             return emptyList()
         }
-        
+
         val alerts = mutableListOf<BudgetAlert>()
-        val budgets = budgetDao.getAllBudgets().first()
+        val budgets = budgetDao.getAllBudgets(userId).first()
         // Filter budgets if a specific category is requested
         val filteredBudgets = if (categoryId != null) budgets.filter { it.categoryId == categoryId } else budgets
-        
+
         // Process each budget to check threshold levels
         for (budget in filteredBudgets) {
             // Calculate total expenses for this budget's category within its date range
             val totalExpenses = transactionDao.getTotalExpensesForCategoryInDateRange(
+                userId,
                 budget.categoryId,
                 budget.startDate,
                 budget.endDate
@@ -82,7 +87,7 @@ class BudgetNotificationService @Inject constructor(
                             "Remaining: $${String.format("%.2f", remaining)}"
                 )
                 alerts.add(alert)
-                createBudgetNotification(budget.id, alert.title, alert.message)
+                createBudgetNotification(userId, alert.title, alert.message)
                 Log.d("BudgetAlert", "Created 50% alert for $categoryName")
             }
             // Check for 80% threshold
@@ -94,7 +99,7 @@ class BudgetNotificationService @Inject constructor(
                             "Remaining: $${String.format("%.2f", remaining)}"
                 )
                 alerts.add(alert)
-                createBudgetNotification(budget.id, alert.title, alert.message)
+                createBudgetNotification(userId, alert.title, alert.message)
                 Log.d("BudgetAlert", "Created 80% alert for $categoryName")
             }
         }
@@ -106,28 +111,25 @@ class BudgetNotificationService @Inject constructor(
     /**
      * Creates and stores a notification in the database based on budget alert
      * Respects user notification preferences from settings
-     *
-     * @param budgetId The ID of the budget that triggered the notification
-     * @param title The title for the notification
-     * @param message The detailed message for the notification
      */
     private suspend fun createBudgetNotification(
-        budgetId: Int,
+        userId: Int,
         title: String,
         message: String
     ) {
         // Double-check notifications are enabled before creating notification
-        val settings = settingsDao.getSettings().first()
+        val settings = settingsDao.getSettings(userId).first()
         if (settings?.notificationsEnabled == false) {
             Log.d("BudgetAlert", "Notifications disabled. Skipping notification creation.")
             return
         }
-        
+
         // Create and store the notification in the database
         val notification = Notification(
             title = title,
             message = message,
-            date = LocalDate.now().format(DateTimeFormatter.ISO_DATE)
+            date = LocalDate.now().format(DateTimeFormatter.ISO_DATE),
+            userId = userId
         )
         notificationDao.insert(notification)
         Log.d("BudgetAlert", "Created notification: $title")
@@ -136,11 +138,8 @@ class BudgetNotificationService @Inject constructor(
     /**
      * Helper method to get category name from ID
      * Returns "Overall" for null category ID or the actual category name
-     *
-     * @param categoryId The ID of the category to look up
-     * @return The name of the category or a default value
      */
     private suspend fun getCategoryName(categoryId: Int?): String {
         return if (categoryId == null) "Overall" else categoryDao.getCategoryNameById(categoryId) ?: "Unknown Category"
     }
-} 
+}

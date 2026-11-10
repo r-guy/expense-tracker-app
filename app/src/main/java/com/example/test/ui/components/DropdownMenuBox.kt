@@ -13,7 +13,8 @@ fun <T> DropdownMenuBox(
     label: String = "",
     labelFor: (T) -> String = { it.toString() },
     onSelected: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    emptyText: String = "No options available"
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -37,14 +38,22 @@ fun <T> DropdownMenuBox(
             expanded = expanded,
             onDismissRequest = { expanded = false }
         ) {
-            options.forEach { item ->
+            if (options.isEmpty()) {
                 DropdownMenuItem(
-                    text = { Text(labelFor(item)) },
-                    onClick = {
-                        onSelected(item)
-                        expanded = false
-                    }
+                    text = { Text(emptyText) },
+                    onClick = { },
+                    enabled = false
                 )
+            } else {
+                options.forEach { item ->
+                    DropdownMenuItem(
+                        text = { Text(labelFor(item)) },
+                        onClick = {
+                            onSelected(item)
+                            expanded = false
+                        }
+                    )
+                }
             }
         }
     }

@@ -137,7 +137,7 @@ fun AddTransactionScreen(
                             selectedItem = viewModel.type,
                             options = listOf("expense", "income", "transfer"),
                             label = "Type",
-                            labelFor = { it },
+                            labelFor = { type -> type.replaceFirstChar { it.uppercase() } },
                             onSelected = { viewModel.type = it },
                             modifier = Modifier.fillMaxWidth()
                         )
@@ -152,7 +152,8 @@ fun AddTransactionScreen(
                                     else categories.find { cat -> cat.id == id }?.name ?: "Unknown"
                                 },
                                 onSelected = { viewModel.categoryId = it },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                emptyText = "No ${viewModel.type} categories yet. Add one from the Categories screen."
                             )
                         }
 
@@ -161,27 +162,30 @@ fun AddTransactionScreen(
                                 selectedItem = viewModel.fromAccountId,
                                 options = accounts.map { it.id },
                                 label = "From Account",
-                                labelFor = { id -> accounts.find { account -> account.id == id }?.name ?: "Unknown" },
+                                labelFor = { id -> if (id == null) "Select From Account" else accounts.find { account -> account.id == id }?.name ?: "Unknown" },
                                 onSelected = { viewModel.fromAccountId = it },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                emptyText = "No accounts yet. Add one from the Accounts screen."
                             )
 
                             DropdownMenuBox(
                                 selectedItem = viewModel.toAccountId,
                                 options = accounts.map { it.id },
                                 label = "To Account",
-                                labelFor = { id -> accounts.find { account -> account.id == id }?.name ?: "Unknown" },
+                                labelFor = { id -> if (id == null) "Select To Account" else accounts.find { account -> account.id == id }?.name ?: "Unknown" },
                                 onSelected = { viewModel.toAccountId = it },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                emptyText = "No accounts yet. Add one from the Accounts screen."
                             )
                         } else {
                             DropdownMenuBox(
                                 selectedItem = viewModel.accountId,
                                 options = accounts.map { it.id },
                                 label = "Account",
-                                labelFor = { id -> accounts.find { account -> account.id == id }?.name ?: "Unknown" },
+                                labelFor = { id -> if (id == null) "Select Account" else accounts.find { account -> account.id == id }?.name ?: "Unknown" },
                                 onSelected = { viewModel.accountId = it },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                emptyText = "No accounts yet. Add one from the Accounts screen."
                             )
                         }
 

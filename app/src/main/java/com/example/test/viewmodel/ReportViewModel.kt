@@ -4,14 +4,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.map
 import androidx.lifecycle.viewModelScope
+import com.example.test.data.UserSession
 import com.example.test.data.dao.TransactionDao
 import com.example.test.data.dao.CategoryDao
 import com.example.test.data.dao.AccountDao
-import com.example.test.model.Category
 import com.example.test.util.CurrencyFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -19,12 +19,21 @@ class ReportViewModel @Inject constructor(
     private val transactionDao: TransactionDao,
     private val categoryDao: CategoryDao,
     private val accountDao: AccountDao,
+    private val userSession: UserSession,
     private val currencyFormatter: CurrencyFormatter
 ) : ViewModel() {
 
-    private val transactionsFlow = transactionDao.getAllTransactions()
-    private val categoriesFlow = categoryDao.getAllCategories()
-    private val accountsFlow = accountDao.getAllAccounts()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val transactionsFlow = userSession.userId
+        .flatMapLatest { userId -> transactionDao.getAllTransactions(userId) }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val categoriesFlow = userSession.userId
+        .flatMapLatest { userId -> categoryDao.getAllCategories(userId) }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val accountsFlow = userSession.userId
+        .flatMapLatest { userId -> accountDao.getAllAccounts(userId) }
 
     val summary = combine(
         transactionsFlow,

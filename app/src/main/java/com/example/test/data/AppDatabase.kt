@@ -130,6 +130,35 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
 }
 
 /**
+ * Migration script from database version 4 to 5
+ * Adds a userId column to every per-user table so accounts, categories,
+ * transactions, budgets and notifications are isolated per signed-in user.
+ *
+ * Existing rows get userId 0 ("unclaimed") and are assigned to the first user
+ * who signs in, so upgrading does not lose data.
+ */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        listOf("accounts", "categories", "transactions", "budgets", "notifications")
+            .forEach { table ->
+                database.execSQL(
+                    "ALTER TABLE $table ADD COLUMN userId INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+    }
+}
+
+/**
+ * Migration script from database version 5 to 6
+ * Drops the unused legacy user_preferences table (Settings is the live model).
+ */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        database.execSQL("DROP TABLE IF EXISTS user_preferences")
+    }
+}
+
+/**
  * Main Room database class that defines the application's database structure
  * Contains all entity definitions and provides access to DAOs
  */
@@ -141,10 +170,9 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         Transaction::class,
         Budget::class,
         Settings::class,
-        Notification::class,
-        UserPreferences::class
+        Notification::class
     ],
-    version = 4
+    version = 6
 )
 abstract class AppDatabase : RoomDatabase() {
     // Data Access Objects (DAOs) for interacting with each entity in the database
@@ -155,5 +183,4 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun budgetDao(): BudgetDao
     abstract fun settingsDao(): SettingsDao
     abstract fun notificationDao(): NotificationDao
-    abstract fun preferencesDao(): PreferencesDao
 }

@@ -5,6 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.test.data.UserSession
 import com.example.test.data.dao.AccountDao
 import com.example.test.model.Account
 import com.example.test.model.AccountType
@@ -14,7 +15,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class AddEditAccountViewModel @Inject constructor(
-    private val accountDao: AccountDao
+    private val accountDao: AccountDao,
+    private val userSession: UserSession
 ) : ViewModel() {
 
     var name by mutableStateOf("")
@@ -40,7 +42,8 @@ class AddEditAccountViewModel @Inject constructor(
                 id = currentAccountId ?: 0,
                 name = name,
                 balance = balance.toDoubleOrNull() ?: 0.0,
-                type = type
+                type = type,
+                userId = userSession.requireUserId()
             )
             accountDao.insert(account)
             onDone()

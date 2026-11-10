@@ -75,6 +75,13 @@ fun NavGraph(startDestination: String = Screen.SignIn.route) {
                     navController.navigate(route) {
                         popUpTo(Screen.Dashboard.route)
                     }
+                },
+                onLogout = {
+                    // Clear the whole back stack so Back cannot return to signed-in screens.
+                    navController.navigate(Screen.SignIn.route) {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

@@ -13,30 +13,26 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface NotificationDao {
     /**
-     * Retrieves all notifications ordered by date (newest first)
-     * Returns a Flow that emits updates whenever the underlying data changes
+     * Retrieves all notifications for one user ordered by date (newest first)
      */
-    @Query("SELECT * FROM notifications ORDER BY date DESC")
-    fun getAll(): Flow<List<Notification>>
+    @Query("SELECT * FROM notifications WHERE userId = :userId ORDER BY date DESC")
+    fun getAll(userId: Int): Flow<List<Notification>>
 
     /**
      * Inserts a new notification into the database
-     * @param notification The notification entity to save
      */
     @Insert
     suspend fun insert(notification: Notification)
 
     /**
      * Marks a notification as read by updating its read flag
-     * @param id The unique identifier of the notification to update
      */
     @Query("UPDATE notifications SET read = 1 WHERE id = :id")
     suspend fun markAsRead(id: Int)
 
     /**
-     * Deletes all notifications from the database
-     * Used to clear notification history
+     * Deletes all notifications belonging to one user
      */
-    @Query("DELETE FROM notifications")
-    suspend fun clearAll()
+    @Query("DELETE FROM notifications WHERE userId = :userId")
+    suspend fun clearAll(userId: Int)
 }

@@ -3,14 +3,16 @@ package com.example.test.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asLiveData
 import androidx.lifecycle.viewModelScope
+import com.example.test.data.UserSession
 import com.example.test.data.dao.AccountDao
 import com.example.test.data.dao.CategoryDao
 import com.example.test.data.dao.TransactionDao
 import com.example.test.model.Transaction
 import com.example.test.util.CurrencyFormatter
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -19,17 +21,22 @@ class TransactionListViewModel @Inject constructor(
     private val transactionDao: TransactionDao,
     private val categoryDao: CategoryDao,
     private val accountDao: AccountDao,
+    private val userSession: UserSession,
     private val currencyFormatter: CurrencyFormatter
 ) : ViewModel() {
 
-    val transactions = transactionDao.getAllTransactions().asLiveData()
-    
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val transactions = userSession.userId
+        .flatMapLatest { userId -> transactionDao.getAllTransactions(userId) }
+        .asLiveData()
+
     // Event to notify that a transaction was deleted
     private val _transactionDeleted = MutableStateFlow(false)
 
     fun deleteTransaction(id: Int, onDashboardRefreshNeeded: () -> Unit = {}) = viewModelScope.launch {
+        val userId = userSession.requireUserId()
         val transaction = transactionDao.getTransactionById(id)
-        
+
         transaction?.let {
             val amountInUSD = it.amount
 
@@ -74,8 +81,8 @@ class TransactionListViewModel @Inject constructor(
             }
         }
 
-        transactionDao.deleteById(id)
-        
+        transactionDao.deleteById(id, userId)
+
         // Notify that dashboard needs to be refreshed
         _transactionDeleted.value = !_transactionDeleted.value
         onDashboardRefreshNeeded()

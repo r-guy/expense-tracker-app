@@ -1,9 +1,24 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
     //kotlin("kapt")
+}
+
+// Loads values from the project root .env file (if present) and exposes them to BuildConfig.
+val envProperties = Properties().apply {
+    val envFile = rootProject.file(".env")
+    if (envFile.exists()) {
+        envFile.inputStream().use { load(it) }
+    }
+}
+
+fun envValue(name: String, defaultValue: String = ""): String {
+    val value = envProperties.getProperty(name) ?: System.getenv(name) ?: defaultValue
+    return value.trim().replace("\\", "\\\\").replace("\"", "\\\"")
 }
 
 android {
@@ -18,6 +33,28 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Currency API configuration from .env
+        buildConfigField(
+            "String",
+            "EXCHANGE_RATE_API_KEY",
+            "\"${envValue("EXCHANGE_RATE_API_KEY")}\""
+        )
+        buildConfigField(
+            "String",
+            "EXCHANGE_RATE_API_BASE",
+            "\"${envValue("EXCHANGE_RATE_API_BASE", "https://v6.exchangerate-api.com/v6")}\""
+        )
+        buildConfigField(
+            "String",
+            "CURRENCY_BACKEND_BASE_URL",
+            "\"${envValue("CURRENCY_BACKEND_BASE_URL", "http://10.0.2.2:8000")}\""
+        )
+        buildConfigField(
+            "String",
+            "NEON_AUTH_BASE_URL",
+            "\"${envValue("NEON_AUTH_BASE_URL")}\""
+        )
     }
 
     buildTypes {
@@ -40,6 +77,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
@@ -86,10 +124,8 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
 
-    // Retrofit + OkHttp
-    implementation(libs.retrofit)
-    implementation(libs.converter.gson)
-    implementation(libs.logging.interceptor)
+    // OkHttp (auth + currency HTTP clients)
+    implementation(libs.okhttp)
 
     // Hilt
     implementation(libs.hilt.android.v2562)
@@ -97,10 +133,6 @@ dependencies {
 
     // Hilt + Compose Navigation
     implementation(libs.androidx.hilt.navigation.compose)
-
-    implementation(libs.ktor.client.android)
-    implementation(libs.ktor.client.content.negotiation)
-    implementation(libs.ktor.serialization.kotlinx.json)
 
     // Testing
     testImplementation(libs.junit)
