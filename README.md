@@ -17,6 +17,23 @@ MVVM, Hilt, Room (SQLite), Coroutines/Flow, DataStore, OkHttp.
 Authentication: Neon Auth (Managed Better Auth).
 Exchange rates: FastAPI backend with ExchangeRate-API fallback.
 
+## Architecture
+
+```
+Compose screens
+      ↓
+ViewModels (StateFlow / LiveData)
+      ↓
+Repositories  ──►  Neon Auth (HTTPS, cookie session)
+      ↓
+Room DAOs (userId-scoped)  ──►  SQLite
+```
+
+Hilt injects every layer. `UserSession` exposes the signed-in user's id, and
+every DAO query is filtered by it, so screens never see another account's rows.
+Currency rates go through `CurrencyExchangeService`: backend first, direct
+ExchangeRate-API fallback, one-hour cache, prefetched at app start.
+
 ## Data model
 
 Every account, category, transaction, budget and notification carries a
