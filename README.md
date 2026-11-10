@@ -20,19 +20,23 @@ Exchange rates: FastAPI backend with ExchangeRate-API fallback.
 ## Architecture
 
 ```
-Compose screens
+Compose screens (view/, ui/)
+      ↓  collectAsStateWithLifecycle / observeAsState
+ViewModels (viewmodel/)        StateFlow / LiveData, viewModelScope
       ↓
-ViewModels (StateFlow / LiveData)
-      ↓
-Repositories  ──►  Neon Auth (HTTPS, cookie session)
-      ↓
-Room DAOs (userId-scoped)  ──►  SQLite
+Repositories & services        AuthRepository, UserDataSeeder,
+      ↓                        CurrencyExchangeService
+Room DAOs ──► SQLite           Neon Auth ──► HTTPS (cookie session)
 ```
 
-Hilt injects every layer. `UserSession` exposes the signed-in user's id, and
-every DAO query is filtered by it, so screens never see another account's rows.
-Currency rates go through `CurrencyExchangeService`: backend first, direct
-ExchangeRate-API fallback, one-hour cache, prefetched at app start.
+- **UI** — Compose screens and reusable components, one `NavHost` for navigation.
+- **ViewModels** — expose `StateFlow`/`LiveData`; all work runs in `viewModelScope`.
+- **Data** — DAOs filter every query by `UserSession.userId` and stamp it on insert.
+  `UserDataSeeder` claims legacy rows and seeds defaults on first sign-in.
+- **Auth** — `NeonAuthApi` + `AuthCookieJar` hold the session; `AuthViewModel`
+  revalidates it at startup and signs out if the server revoked it.
+- **Currency** — backend first, direct API fallback, one-hour cache, prefetched at start.
+- **DI** — Hilt modules provide the database, DAOs, auth client and singletons.
 
 ## Data model
 
